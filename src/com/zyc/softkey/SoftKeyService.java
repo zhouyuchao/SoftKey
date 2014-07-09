@@ -2,6 +2,7 @@ package com.zyc.softkey;
 
 import java.lang.reflect.Field;
 
+import android.annotation.SuppressLint;
 import android.app.Service;
 import android.content.Intent;
 import android.os.Handler;
@@ -11,13 +12,13 @@ import android.util.Log;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
-import android.view.View.OnClickListener;
-import android.view.View.OnLongClickListener;
 import android.view.View.OnTouchListener;
 import android.view.WindowManager;
 import android.view.WindowManager.LayoutParams;
 import android.widget.Button;
+import android.widget.Toast;
 
+@SuppressLint("HandlerLeak")
 public class SoftKeyService extends Service {
     public static final String TAG = "SoftKeyService";
     
@@ -36,7 +37,9 @@ public class SoftKeyService extends Service {
     private float mPosToViewY;
     private float mPosToScreenX;
     private float mPosToScreenY;
-    private int[] mLocOfView;
+    
+    private float mStartOffsetX;
+    private float mStartOffsetY;
 
     private int mStatusBarHeight;
     
@@ -90,20 +93,16 @@ public class SoftKeyService extends Service {
 
     private void showSoftKey() {
         Log.d(TAG, "showSoftKey --->");
-        mLocOfView = new int[2];
-        
-        mWindowManager = ((WindowManager) getSystemService("window"));
+        mWindowManager = (WindowManager) getApplication().getSystemService(WINDOW_SERVICE);
 
         mWmParams = new WindowManager.LayoutParams();
         mWmParams.width = 90; // LayoutParams.WRAP_CONTENT
         mWmParams.height = 90;
-        mWmParams.gravity = Gravity.RIGHT | Gravity.CENTER_VERTICAL;
+        mWmParams.gravity = Gravity.TOP | Gravity.LEFT; // Gravity.RIGHT | Gravity.CENTER_VERTICAL
         mWmParams.type = LayoutParams.TYPE_PHONE;
         mWmParams.flags |= LayoutParams.FLAG_NOT_FOCUSABLE;
-
-        WindowManager.LayoutParams localLayoutParams = mWmParams;
-        localLayoutParams.flags = (0x8 | localLayoutParams.flags);
         mWmParams.format = 1;
+        mWmParams.alpha = 1; // 透明度调节
 
         mSoftKey = new Button(this);
         mSoftKey.setBackgroundResource(R.drawable.ic_floater_hl);
@@ -130,8 +129,8 @@ public class SoftKeyService extends Service {
     }
     
     private void updateViewPosition() {
-        mWmParams.x = ((int) (mPosToScreenX - mPosToViewX - mLocOfView[0]));
-        mWmParams.y = ((int) (mPosToScreenY - mPosToViewY - mLocOfView[1]));
+        mWmParams.x = (int) (mPosToScreenX - mPosToViewX);
+        mWmParams.y = (int) (mPosToScreenY - mPosToViewY);
         Log.i(TAG, "updateViewPosition (" + mWmParams.x + ", " + mWmParams.y + ")");
         mWindowManager.updateViewLayout(mSoftKey, mWmParams);
     }
@@ -140,18 +139,7 @@ public class SoftKeyService extends Service {
         @Override
         public boolean onTouch(View v, MotionEvent event) {
             int statusBarHeight = mStatusBarHeight;
-            /*
-            int[] viewPos = new int[2];
-            mSoftKey.getLocationOnScreen(viewPos);
-            Log.d(TAG, "view position1 (" + viewPos[0] + ", " + viewPos[1] + ")");
             
-            x = event.getRawX() - viewPos[0];
-            y = event.getRawY() - statusBarHeight - viewPos[1];
-            mWmParams.x = (int) x;
-            mWmParams.y = (int) y;
-            Log.i(TAG, "updateViewPosition (" + mWmParams.x + ", " + mWmParams.y + ")");
-            mWindowManager.updateViewLayout(mSoftKey, mWmParams);
-*/
             switch (event.getAction()) {
             case MotionEvent.ACTION_DOWN:
                 Log.d(TAG, "---> ACTION_DOWN <---");
@@ -159,6 +147,9 @@ public class SoftKeyService extends Service {
                 mPosToViewX = event.getX();
                 mPosToViewY = event.getY();
                 Log.d(TAG, "mTouchStartX = " + mPosToViewX + ", mTouchStartY = " + mPosToViewY);
+                
+                mStartOffsetX = event.getRawX();
+                mStartOffsetY = event.getRawY();
                 
                 mSoftKey.setBackgroundResource(R.drawable.ic_floater_hl);
                 
@@ -177,7 +168,16 @@ public class SoftKeyService extends Service {
                 break;
             case MotionEvent.ACTION_UP:
                 Log.d(TAG, "---> ACTION_UP <---");
-                updateViewPosition();
+                
+                float newOffsetX = event.getRawX();
+                float newOffsetY = event.getRawY();
+                if (Math.abs(newOffsetX) - Math.abs(mStartOffsetX) > 3
+                        && Math.abs(newOffsetY) - Math.abs(mStartOffsetY) > 3){
+                    Toast.makeText(getApplicationContext(), "click...", Toast.LENGTH_SHORT).show();
+                } else {
+                    updateViewPosition();
+                }
+                
                 mHandler.sendEmptyMessageDelayed(MSG_UPDATE_SOFTKEY, INT_SOFTKEY_UPDATE_TIME);
                 break;
             }
