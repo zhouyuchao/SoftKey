@@ -1,6 +1,8 @@
 package com.zyc.softkey.view;
 
 import java.lang.reflect.Field;
+import java.util.Timer;
+import java.util.TimerTask;
 
 import android.content.Context;
 import android.os.Handler;
@@ -15,7 +17,6 @@ import android.view.WindowManager.LayoutParams;
 import android.widget.Button;
 import android.widget.Toast;
 
-import com.nineoldandroids.animation.ObjectAnimator;
 import com.zyc.softkey.R;
 import com.zyc.softkey.operate.Operations;
 import com.zyc.softkey.utils.ILog;
@@ -31,6 +32,10 @@ public class FloatView {
     private static final int MSG_CLICK = 1001;
     private static final int MSG_DOUBLE_CLICK = 1002;
     private static final int MSG_LONG_PRESS = 1003;
+    
+    private static final int MSG_TIME_LOOP = 1004;
+    
+    private static final int LOOP_TIME = 1000;
     
     private static final int FLOAT_CONTROL_OFFSET = 10;
     private static final int FLOAT_CONTROL_LONGPRESS = 1000;
@@ -49,8 +54,6 @@ public class FloatView {
     private float mStartOffsetY;
     private int mStatusBarHeight;
     
-    private ObjectAnimator mBtnAnim;
-    
     Handler mHandler = new Handler(){
         public void handleMessage(Message msg) {
             switch (msg.what) {
@@ -60,18 +63,35 @@ public class FloatView {
                     mSoftKey.setBackgroundResource(R.drawable.ic_floater_nor);
                 }
                 break;
+                
             case MSG_CLICK:
-//                showToast("click...");
-                Operations.click(mContext);
+                click();
                 break;
+                
             case MSG_DOUBLE_CLICK:
-//                showToast("doubleClick...");
-                Operations.doubleClick(mContext);
+                doubleClick();
                 break;
+                
             case MSG_LONG_PRESS:
-//                showToast("longPress...");
-                Operations.longPress(mContext);
+                longPress();
                 break;
+                
+            case MSG_TIME_LOOP:
+                ILog.d(TAG, "handler ---> MSG_TIME_LOOP ...");
+                if (mHandler.hasMessages(MSG_TIME_LOOP)) {
+                    mHandler.removeMessages(MSG_TIME_LOOP);
+                }
+                
+                new Thread() {
+                    @Override
+                    public void run() {
+                        Operations.doExec();
+                    }
+                }.start();
+                
+//                mHandler.sendEmptyMessageDelayed(MSG_TIME_LOOP, LOOP_TIME);
+                break;
+                
             default:
                 break;
             }
@@ -126,13 +146,12 @@ public class FloatView {
         mSoftKey = new Button(mContext);
         mSoftKey.setBackgroundResource(R.drawable.ic_floater_hl);
         mSoftKey.setOnTouchListener(skTouchListener);
-//        addAnimation(mSoftKey);
         
         mWindowManager.addView(mSoftKey, mWmParams);
         
         mHandler.sendEmptyMessageDelayed(MSG_UPDATE_SOFTKEY, INT_SOFTKEY_UPDATE_TIME);
     }
-    
+
     private int getStatusBarHeight() {
         if (mStatusBarHeight == 0) {
             try {
@@ -148,8 +167,11 @@ public class FloatView {
         return mStatusBarHeight;
     }
     
-    private void showToast(String msg){
-        Toast.makeText(mContext.getApplicationContext(), msg, Toast.LENGTH_SHORT).show();
+    private void updateViewPosition(int x, int y) {
+        mWmParams.x = x;
+        mWmParams.y = y;
+        ILog.i(TAG, "updateViewPosition (" + x + ", " + y + ")");
+        mWindowManager.updateViewLayout(mSoftKey, mWmParams);
     }
     
     OnTouchListener skTouchListener = new OnTouchListener() {
@@ -175,7 +197,7 @@ public class FloatView {
                 
                 mStartOffsetX = event.getRawX();
                 mStartOffsetY = event.getRawY();
-//                ILog.d(TAG, "getRawX = " + mStartOffsetX + ", getRawY = " + mStartOffsetY);
+                ILog.d(TAG, "getRawX = " + mStartOffsetX + ", getRawY = " + mStartOffsetY);
                 
                 mSoftKey.setBackgroundResource(R.drawable.ic_floater_hl);
                 
@@ -190,13 +212,13 @@ public class FloatView {
                 screenPosX = event.getRawX();
                 screenPosY = event.getRawY() - statusBarHeight;
                 
-//                ILog.d(TAG, "ACTION_MOVE x = " + event.getX() + ", y = " + event.getY());
-//                ILog.d(TAG, "ACTION_MOVE rawx = " + event.getRawX() + ", rawy = " + event.getRawY());
+                ILog.d(TAG, "ACTION_MOVE x = " + event.getX() + ", y = " + event.getY());
+                ILog.d(TAG, "ACTION_MOVE rawx = " + event.getRawX() + ", rawy = " + event.getRawY());
                 
-                if (Math.abs(Math.abs(mStartOffsetX) - Math.abs(screenPosX)) > FLOAT_CONTROL_OFFSET
-                        || Math.abs(Math.abs(mStartOffsetY) - Math.abs(screenPosY + statusBarHeight)) > FLOAT_CONTROL_OFFSET) {
+                if (Math.abs(mStartOffsetX) - Math.abs(screenPosX) > FLOAT_CONTROL_OFFSET
+                        || Math.abs(mStartOffsetY) - Math.abs(screenPosY + statusBarHeight) > FLOAT_CONTROL_OFFSET) {
                     if (mHandler.hasMessages(MSG_LONG_PRESS)) {
-//                        ILog.d(TAG, "ACTION_MOVE remove MSG_LONG_PRESS");
+                        ILog.d(TAG, "ACTION_MOVE remove MSG_LONG_PRESS");
                         mHandler.removeMessages(MSG_LONG_PRESS);
                     }
                     updateViewPosition((int)(screenPosX - viewPosX), (int)(screenPosY - viewPosY));
@@ -206,10 +228,10 @@ public class FloatView {
                 ILog.d(TAG, "---> ACTION_UP <---");
                 float newOffsetX = event.getRawX();
                 float newOffsetY = event.getRawY();
-//                ILog.d(TAG, "newOffsetX = " + newOffsetX + ", newOffsetY = " + newOffsetY);
+                ILog.d(TAG, "newOffsetX = " + newOffsetX + ", newOffsetY = " + newOffsetY);
                 
                 if (startTime - System.currentTimeMillis() < 500 && mHandler.hasMessages(MSG_LONG_PRESS)) {
-//                    ILog.d(TAG, "ACTION_UP remove MSG_LONG_PRESS");
+                    ILog.d(TAG, "ACTION_UP remove MSG_LONG_PRESS");
                     mHandler.removeMessages(MSG_LONG_PRESS);
                     
                     if (mHandler.hasMessages(MSG_CLICK)) {
@@ -218,7 +240,12 @@ public class FloatView {
                         mHandler.sendEmptyMessageDelayed(MSG_CLICK, 500);
                     }
                 } else {
-                    updateViewFinal(newOffsetX, newOffsetY - viewPosY - statusBarHeight);
+                    if (newOffsetX < mScreenWidth / 2) {
+                        newOffsetX = 0;
+                    } else {
+                        newOffsetX = mScreenWidth;
+                    }
+                    updateViewPosition((int)newOffsetX, (int)(newOffsetY - viewPosY - statusBarHeight));
                 }
                 
                 mHandler.sendEmptyMessageDelayed(MSG_UPDATE_SOFTKEY, INT_SOFTKEY_UPDATE_TIME);
@@ -228,36 +255,18 @@ public class FloatView {
         }
     };
     
-    private void updateViewPosition(int x, int y) {
-        mWmParams.x = x;
-        mWmParams.y = y;
-//        ILog.i(TAG, "updateViewPosition (" + x + ", " + y + ")");
-        mWindowManager.updateViewLayout(mSoftKey, mWmParams);
+    private void click(){
+        Toast.makeText(mContext.getApplicationContext(), "click...", Toast.LENGTH_SHORT).show();
+        mHandler.sendEmptyMessageDelayed(MSG_TIME_LOOP, LOOP_TIME);
     }
     
-    private void updateViewFinal(float x, float y){
-        DisplayMetrics dm = new DisplayMetrics();
-        dm = mContext.getResources().getDisplayMetrics();
-        int screenWidth = dm.widthPixels;
-        int screenHeight = dm.heightPixels;
-        
-//        ILog.d(TAG, "updateViewFinal [" + screenWidth + ", " + screenHeight + "]");
-        
-        if (x < screenWidth / 2) {
-            x = 0;
-        } else {
-            x = screenWidth;
-        }
-        updateViewPosition((int)x, (int) y);
-//        addAnimation(screenWidth);
+    private void doubleClick(){
+        Toast.makeText(mContext.getApplicationContext(), "doubleClick...", Toast.LENGTH_SHORT).show();
+        Operations.goToHome(mContext);
     }
     
-    private void addAnimation(int screenWidth){
-        ILog.d(TAG, "addAnimation ---> ");
-//        mBtnAnim = ObjectAnimator.ofFloat(view, "x", view.getX(), mScreenHeight);
-        ObjectAnimator anim = ObjectAnimator.ofFloat(mSoftKey, "x", mSoftKey.getX(), screenWidth - mSoftKey.getWidth());
-        anim.setDuration(300);
-        anim.start();
+    private void longPress(){
+        Toast.makeText(mContext.getApplicationContext(), "longPress...", Toast.LENGTH_SHORT).show();
+        Operations.stopExec();
     }
-    
 }

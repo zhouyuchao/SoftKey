@@ -1,4 +1,4 @@
-package com.zyc.softkey.constants;
+package com.zyc.softkey.Constants;
 
 public class Constants {
     

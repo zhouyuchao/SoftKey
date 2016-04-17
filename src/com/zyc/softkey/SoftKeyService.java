@@ -14,6 +14,9 @@ public class SoftKeyService extends Service {
     
     private FloatView mFloatView;
     
+    private int posX;
+    private int posY;
+    
     @Override
     public IBinder onBind(Intent intent) {
         return null;

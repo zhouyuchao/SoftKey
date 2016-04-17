@@ -1,50 +1,29 @@
 package com.zyc.softkey.operate;
 
+import java.io.DataOutputStream;
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.Timer;
+import java.util.TimerTask;
+
 import android.content.Context;
 import android.content.Intent;
-import android.net.Uri;
-import android.os.Build;
-import android.os.IBinder;
-import android.provider.Settings;
 
 import com.zyc.softkey.utils.ILog;
 
 public class Operations {
     private static final String TAG = "Operations";
-    
+
     private Context mContext;
     
-    private static final String SCHEME = "package";
-    /** 调用系统InstalledAppDetails界面所需的Extra名称(用于Android 2.1及之前版本) */
-    private static final String APP_PKG_NAME_21 = "com.android.settings.ApplicationPkgName";
-    /** 调用系统InstalledAppDetails界面所需的Extra名称(用于Android 2.2) */
-    private static final String APP_PKG_NAME_22 = "pkg";
-    /** InstalledAppDetails所在包名 */
-    private static final String APP_DETAILS_PACKAGE_NAME = "com.android.settings";
-    /** InstalledAppDetails类名 */
-    private static final String APP_DETAILS_CLASS_NAME = "com.android.settings.InstalledAppDetails";
-    
-    public Operations(Context context){
+    private static Timer timer;
+
+    public Operations(Context context) {
         mContext = context;
     }
-    
-    public static void click(Context context){
-        ILog.d(TAG, "click");
-        
-    }
-    
-    public static void doubleClick(Context context){
-        ILog.d(TAG, "doubleClick");
-        goToHome(context);
-    }
-    
-    public static void longPress(Context context){
-        ILog.d(TAG, "longPress");
-//        showInstalledAppDetails(context, "com.zyc.softkey");
-        showRecentTask();
-    }
-    
-    private static void goToHome(Context context){
+
+    public static void goToHome(Context context) {
         ILog.d(TAG, "goToHome");
         Intent intent = new Intent(Intent.ACTION_MAIN);
         intent.addCategory(Intent.CATEGORY_HOME);
@@ -52,55 +31,99 @@ public class Operations {
         context.startActivity(intent);
     }
 
-    /**
-     * 调用系统InstalledAppDetails界面显示已安装应用程序的详细信息.对于Android 2.3（Api Level
-     * 9）以上，使用SDK提供的接口； 2.3以下，使用非公开的接口（查看InstalledAppDetails源码）。 
-     * 
-     * @param context [参数说明]
-     * @return void [返回类型说明]
-     * @exception throws [违例类型] [违例说明]
-     */
-    private static void showInstalledAppDetails(Context context, String packageName) {
-        ILog.d(TAG, "showInstalledAppDetails");
-        Intent intent = new Intent();
-        
-        final int apiLevel = Build.VERSION.SDK_INT;
-        if (apiLevel >= 9) { // 2.3（ApiLevel 9）以上，使用SDK提供的接口
-            intent.setAction(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
-            Uri uri = Uri.fromParts(SCHEME, packageName, null);
-            intent.setData(uri);
-        } else {
-            // 2.3以下，使用非公开的接口（查看InstalledAppDetails源码）
-            // 2.2和2.1中，InstalledAppDetails使用的APP_PKG_NAME不同。
-            final String appPkgName = (apiLevel == 8 ? APP_PKG_NAME_22 : APP_PKG_NAME_21);
-            intent.setAction(Intent.ACTION_VIEW);
-            intent.setClassName(APP_DETAILS_PACKAGE_NAME, APP_DETAILS_CLASS_NAME);
-            intent.putExtra(appPkgName, packageName);
-        }
-        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        context.startActivity(intent);
+    public static void doExec() {
+//        loopExec();
+        doCmdCommand();
+    
+        TimerTask task = new TimerTask() {
+            public void run() {
+//                loopExec();
+                doCmdCommand();
+            }
+        };
+
+        timer = new Timer();
+        timer.schedule(task, 1000, 1000);
     }
     
-    /**
-     * 近期任务
-     * <功能描述> [参数说明]
-     * @return void [返回类型说明]
-     * @exception throws [违例类型] [违例说明]
-     */
-    private static void showRecentTask() {
-        try {
-            Class localClass1 = Class.forName("android.os.ServiceManager");
-            IBinder localIBinder = (IBinder) localClass1.getMethod("getService", 
-                    new Class[] { String.class }).invoke(localClass1, new Object[] { "statusbar" });
-            
-            Class localClass2 = Class.forName("com.android.internal.statusbar.IStatusBarService").getClasses()[0];
-            Object localObject = localClass2.getMethod("asInterface",
-                    new Class[] { IBinder.class }).invoke(null, new Object[] { localIBinder });
-            
-            localClass2.getMethod("toggleRecentApps", new Class[0]).invoke(localObject, new Object[0]);
-            return;
-        } catch (Exception e) {
-            return;
+    public static void stopExec(){
+        if (null != timer) {
+            timer.cancel();
         }
+    }
+
+    private static void loopExec() {
+        final String command[] = new String[] { "/system/xbin/su",
+                "adb shell input tap 550 1300" };
+
+        try {
+            String result = run(command, "/system/xbin/");
+            ILog.i(TAG, "deExec result : " + result);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private static void doCmdCommand() {
+        // adb push core code
+        String command = "input tap 550 1190";
+        Process process = null;
+        DataOutputStream os = null;
+        try {
+            process = Runtime.getRuntime().exec("su");
+            os = new DataOutputStream(process.getOutputStream());
+            os.writeBytes(command + "\n");
+            os.writeBytes("exit\n");
+            os.flush();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    /**
+     * 执行一个shell命令，并返回字符串值
+     * 
+     * @param cmd
+     *            命令名称&参数组成的数组（例如：{"/system/bin/cat", "/proc/version"}）
+     * @param workdirectory
+     *            命令执行路径（例如："system/bin/"）
+     * @return 执行结果组成的字符串
+     * @throws IOException
+     */
+    public static synchronized String run(String[] cmd, String workdirectory)
+            throws IOException {
+        StringBuffer result = new StringBuffer();
+        try {
+            // 创建操作系统进程（也可以由Runtime.exec()启动）
+            // Runtime runtime = Runtime.getRuntime();
+            // Process proc = runtime.exec(cmd);
+            // InputStream inputstream = proc.getInputStream();
+            ProcessBuilder builder = new ProcessBuilder(cmd);
+
+            InputStream in = null;
+            // 设置一个路径（绝对路径了就不一定需要）
+            if (workdirectory != null) {
+                // 设置工作目录（同上）
+                builder.directory(new File(workdirectory));
+                // 合并标准错误和标准输出
+                builder.redirectErrorStream(true);
+                // 启动一个新进程
+                Process process = builder.start();
+
+                // 读取进程标准输出流
+                in = process.getInputStream();
+                byte[] re = new byte[1024];
+                while (in.read(re) != -1) {
+                    result = result.append(new String(re));
+                }
+            }
+            // 关闭输入流
+            if (in != null) {
+                in.close();
+            }
+        } catch (Exception ex) {
+            ex.printStackTrace();
+        }
+        return result.toString();
     }
 }
